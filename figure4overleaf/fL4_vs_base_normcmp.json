@@ -1,0 +1,10 @@
+{
+  "paper_name": "fL4_vs_base_normcmp",
+  "source_figure": "llm/results/stageB_vs_base",
+  "source_data": "fig_vs_base.py \u2014 each form against the model it started from (Qwen3-1.7B-Base answers = Base_repo) over the canonical-vs-amari boxes; llm/results/bench/arena_v01/h2h_vs_base/*.json + h2h_normcmp/*_mini2_raw.json, judge gpt-4.1-mini-2025-04-14",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

@@ -1,0 +1,10 @@
+{
+  "paper_name": "f13_policy_3x7_canonical",
+  "source_figure": "python/figs/part3_policy_3x7_p9",
+  "source_data": "run_canon_final.py run_2x7/fig_policy_3x7 \u2014 \u03c0* recovery under the exact inner term | off-policy Amari f'(1)=0 | off-policy canonical f'(1)=f''(1), peak 0.9 (high drift), 100 MDPs, pure off-policy (single logged a'). RKL has no Amari cell (u\u00b7log u is already canonical) and euc no canonical cell (not an f-divergence). RKL's canonical arm equals its exact arm to machine precision \u2014 the sample-free property.",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

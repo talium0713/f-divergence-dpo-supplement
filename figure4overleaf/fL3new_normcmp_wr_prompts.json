@@ -1,0 +1,10 @@
+{
+  "paper_name": "fL3new_normcmp_wr_prompts",
+  "source_figure": "llm/results/stageB_normcmp_wr_prompts",
+  "source_data": "fig_normcmp.py --bottom mix \u2014 same top panel as fL3; bottom is how the 500 Arena-Hard prompts actually split once each is judged twice with the positions swapped (canonical both / no consistent winner / amari both), from h2h_normcmp/*_mini2_raw.json",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

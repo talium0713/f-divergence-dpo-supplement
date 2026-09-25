@@ -1,0 +1,10 @@
+{
+  "paper_name": "f01_toy_scaling_asize",
+  "source_figure": "python/figs/toy_Asize_ablation_right",
+  "source_data": "fig_toy_ablation.py --panel right \u2014 the |A|-scaling panel of f01_toy_scaling on its own, for composing beside the Stage A panels: off-policy inner-term noise std_{a~pi_ref}[Psi(u_a)] vs action-set size, median with IQR band over 10 seeds, broken y-axis with RKL's exact 0 in the lower strip. Toy: pi_ref uniform, pi = softmax of Gaussian logits (SCALE 3.0), so the mechanism is the claim and the magnitude is not \u2014 Stage A (fL0) measures the real one",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

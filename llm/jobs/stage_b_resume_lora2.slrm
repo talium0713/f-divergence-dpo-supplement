@@ -1,0 +1,70 @@
+#!/bin/bash
+# Second resume batch: the runs the node failure requeued, plus 4B seed 0.
+#
+# The first batch (5552333) finished the runs the 23 h wall cut short. This one covers the three the
+# 04:42 node failure requeued — restarting those from step 0 costs 43.9 h at the 8B rate and 32.7 h at
+# the Gemma rate, the latter above its own 23 h wall, so a fresh start would simply fail again — and
+# takes 4B seed 0 from the step-1000 snapshot to the full 1910.
+#
+# WHY 4B SEED 0 IS HERE. Its two arms were merged at step 1000 and judged from there (canonical 58.5%
+# [54.6,62.3]). The arms match each other, but at 1.05 epochs they do not match the 2-epoch recipe every
+# other block uses. Both are resumed together; the step-1000 policies are kept as `_policy_step1000`, so
+# the published number stays reproducible until the 1910 pair is generated and judged.
+#
+# WHY adiv Amari SEED 2 IS *NOT* HERE. Its adapter sits at step 1400, so a resume would save ~32 h — but
+# its partner, adiv canonical seed 2 (5521255_3), is at this moment running fresh from step 0. Resuming
+# one arm of a pair and not the other puts cold AdamW moments on one side of the comparison only, which
+# is the one asymmetry a resume must never introduce. It is left in the array to run fresh, matching its
+# partner. Same reasoning kept both arms of the FKL seed-2 pair together: both were interrupted, so both
+# are resumed (from 1600 and 1400).
+#
+#   0 4B amari s0 @1000   1 4B canon s0 @1000     2 gemma amari s0 @1200
+#   3 8B FKL amari s2 @1600  4 8B FKL canon s2 @1400
+#
+#SBATCH --account=ACCOUNT
+#SBATCH --job-name=lorares2
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --array=0-4%5
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=23:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+
+set -euo pipefail
+REPO="$SLURM_SUBMIT_DIR/.."
+export HF_HOME="/scratch/$USER/hf_cache"
+export HF_HUB_OFFLINE=1
+export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+module load StdEnv/2023 python/3.11 cuda/12.2
+source "$REPO/venv_gpu/bin/activate"
+cd "$REPO/llm"
+OUT_DIR="/scratch/$USER/bregman-lab/llm/results/bench"
+RESCUED="$OUT_DIR/_rescued_20260919"
+
+#      tag | base model | div | norm | seed | resume step
+SPECS=(
+  "lora4b_kl_amari_bdpo_token_s0|Qwen/Qwen3-4B-Base|kl|amari|0|1000"
+  "lora4b_kl_canon_bdpo_token_s0|Qwen/Qwen3-4B-Base|kl|canon|0|1000"
+  "loragemma1b_kl_amari_bdpo_token_s0|google/gemma-3-1b-it|kl|amari|0|1200"
+  "lora8b_rkl_amari_bdpo_token_s2|Qwen/Qwen3-8B-Base|rkl|amari|2|1600"
+  "lora8b_rkl_canon_bdpo_token_s2|Qwen/Qwen3-8B-Base|rkl|canon|2|1400"
+)
+IFS="|" read -r TAG M DIV NORM SEED RSTEP <<< "${SPECS[$SLURM_ARRAY_TASK_ID]}"
+SRC="$RESCUED/stageB_${TAG}_adapter"
+[ -f "$SRC/adapter_model.safetensors" ] || { echo "no rescued adapter at $SRC"; exit 1; }
+
+echo "=== resume $TAG [div=$DIV norm=$NORM seed=$SEED] from step $RSTEP on $(hostname) | $(date) ==="; nvidia-smi
+python stage_b_train.py \
+  --ref "$M" --policy "$M" --init-noise 0.01 \
+  --lora-r 128 --lora-alpha 128 --lora-dropout 0.05 --save-adapter-every 200 \
+  --resume-adapter "$SRC" --resume-step "$RSTEP" \
+  --data data/uf_pairs_train_full.jsonl --eval-data data/uf_pairs_test.jsonl \
+  --div "$DIV" --norm "$NORM" --inner sample --step-mode token \
+  --beta 0.1 --lr 5e-6 --lr-schedule linear --warmup-ratio 0.05 --weight-decay 0.01 --adam-beta2 0.999 \
+  --epochs 2 --grad-accum 64 --grad-clip 1.0 --max-len 1024 --clamp 15 \
+  --eval-n 256 --log-every 25 --eval-every 100 --seed "$SEED" --save-policy \
+  --out "$OUT_DIR/stageB_${TAG}"
+echo "=== done $TAG | $(date) ==="

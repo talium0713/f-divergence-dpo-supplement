@@ -1,0 +1,10 @@
+{
+  "paper_name": "Figure3",
+  "source_figure": "python/figs/figure3_noise_scaling",
+  "source_data": "fig_figure3.py \u2014 the composed Figure 3, 50/25/25 on one gridspec row so all three panels share an axes height. (left) toy: std_{a~pi_ref}[Psi(u_a)] vs action-set size, median + IQR over 10 seeds, pi_ref uniform and pi = softmax of Gaussian logits, broken y-axis with RKL's exact 0 below the break \u2014 mechanism only, the magnitude is toy-dependent. (middle) measured: per-token Psi(u_a) per divergence, box with 1-99% whiskers on symlog. (right) measured: histogram of log10(pi_theta/pi_ref) per logged token, min u = 1.5e-16. Both measured panels come from llm/results/stageA_qwen3_1p7b_raw.npz: pi_theta = Qwen3-1.7B, pi_ref = Qwen3-1.7B-Base, 133153 logged tokens of llm/data/uf_test_prefs.jsonl, forward pass only, no training. Built at 13x3.9 in with 18pt labels so it survives being scaled to about half width on the page; the panels carry no titles, so the caption must state the models, the whisker convention and min u",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

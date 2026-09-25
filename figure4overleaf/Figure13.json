@@ -1,0 +1,10 @@
+{
+  "paper_name": "Figure13",
+  "source_figure": "python/figs/t06_alpha_sweep",
+  "source_data": "fig_paper_layered_v2.py \u2014 the three peaks side by side, for the main body. Same data as the three standalone files.",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

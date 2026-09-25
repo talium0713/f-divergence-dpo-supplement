@@ -1,0 +1,219 @@
+"""
+fig_paper_layered_v2.py — revised t04 and t06, both recast as Amari vs canonical.
+
+  figs/t04_state_anatomy_pN     2x7: rows = the seven regularizers, columns = Amari | canonical.
+                                Each panel is pi* (dashed) against the recovered pi_theta (solid)
+                                over the twelve (layer, state) cells x 3 actions. Euclidean has no
+                                f(u) generator, so its canonical cell is blank.
+  figs/t06_alpha_sweep_pN       the alpha family under both normalizations, one file per peak;
+  figs/t06_alpha_sweep          the same three peaks side by side, for the main body.
+
+Text is kept to the minimum the panel needs; everything else belongs in the caption.
+Reads only cached layered runs - no training. Run from python/:  python fig_paper_layered_v2.py
+"""
+from __future__ import annotations
+
+import glob
+import json
+import os
+import re
+
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+# Real LaTeX, as in Figures 7-9: every label here is ASCII + $...$ (SHORT_TEX keeps alpha-div and
+# chi^2 in math mode), which is what usetex needs.
+plt.rcParams.update({"text.usetex": True, "font.family": "serif",
+                     "text.latex.preamble": "\n".join([r"\usepackage{amsmath}",
+                                                       r"\usepackage{amssymb}"])})
+AX_FS, TICK_FS, LEG_FS, TITLE_FS = 15, 12, 12, 14
+
+from regularizers import REGKEYS as _REGKEYS, COLORS, SHORT, SHORT_TEX
+from mdp import SN, NA, solve_dp, uniform_pis
+
+plt.rcParams.update({"font.family": "serif", "mathtext.fontset": "cm"})
+# euc is out of the paper figures: not an f-divergence, so it never had a canonical arm and its
+# t04 column was a hatched "no canonical form exists" placeholder.
+REGKEYS = [k for k in _REGKEYS if k != "euc"]
+
+DEPTH = 4
+GAMMA, EPS = 0.9, 0.2
+ARMS = [("std", "Amari"), ("canon", "Canonical")]   # t04 row labels; the f'(1) conditions they
+# stand for are stated in the caption, not repeated on every panel of every peak
+# t04 runs six columns wide and is placed at roughly half that on the page, so the column titles
+# (divergence), the row labels (normalization) and the per-cell gap all need to survive a 2x
+# downscale. TICK_FS follows so the layer ticks do not look stranded under 17pt titles.
+LABEL_FS, TICK_FS, ANNOT_FS = 17, 12, 14
+# The row labels are now one word each, so they no longer crowd the 2-inch height of a row and
+# can carry the same weight as the column titles. 'Policy recovery' sits outside them as the shared
+# y-axis title.
+ROW_FS = 15
+C_AM, C_CA = "#6b7280", "#b0224b"          # normalization colours, shared with fL3
+
+
+def _save(fig, stem):
+    for ext in ("png", "pdf"):
+        fig.savefig(f"{stem}.{ext}", dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    return f"{stem}.png"
+
+
+def _kl_kw(rk, lw=1.6):
+    return dict(lw=2.6 if rk == "kl" else lw, zorder=8 if rk == "kl" else 3)
+
+
+# ───────────────────────────────────────────────── t04: 2x7 Amari vs canonical
+def fig_anatomy(path, suffix):
+    d = json.load(open(path)); pc = d["panel_cache"]; peak = d["peak"]
+    block = SN * NA
+    centers = [l * block + (block - 1) / 2 for l in range(DEPTH)]
+    # 2 rows (the two normalizations) x 6 columns (the divergences). Wide and short rather than the
+    # old tall 7x2: six panels across need the horizontal room, and the x axis is only DEPTH ticks.
+    fig, axes = plt.subplots(2, len(REGKEYS), figsize=(2.55 * len(REGKEYS), 5.0),
+                             sharex=True, sharey=True)
+    gaps = {}
+    rewards = np.asarray(pc["rewards"]); alphas = pc["alphas"]
+    for r, rk in enumerate(REGKEYS):
+        # pi* is the REGULARIZED optimum, recomputed from the cached reward draw and calibrated
+        # weight - not any arm's recovered policy (they are what we are comparing against it).
+        star = solve_dp(rk, rewards, uniform_pis(DEPTH), float(alphas[rk]), GAMMA, EPS).pistar
+        for c, (arm, _) in enumerate(ARMS):
+            ax = axes[c, r]      # row = arm, column = divergence
+            pol = pc["pols"][arm].get(rk)
+            if pol is None:                                    # euc has no canonical representative
+                ax.add_patch(plt.Rectangle((0, 0), 1, 1, transform=ax.transAxes, facecolor="#eee",
+                                           hatch="///", edgecolor="#bbb", lw=0))
+                ax.text(0.5, 0.5, "no canonical form exists", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=7.5, color="#777")
+                ax.set_xticks(centers); continue
+            pol = np.asarray(pol)
+            tgt = np.asarray(d["gap"][arm][rk])
+            idx = np.arange(star.size)
+            ax.plot(idx, star.reshape(-1), "--", color="#444", lw=0.9, marker="o", ms=1.6, zorder=2)
+            ax.plot(idx, pol.reshape(-1), "-", color=COLORS[rk], **_kl_kw(rk))
+            for l in range(1, DEPTH):
+                ax.axvline(l * block - 0.5, color="#e9e9e9", lw=0.6)
+            # The per-cell gap is the number a reader compares across the grid; 6.5pt was sized for
+            # the old tall 7x2 layout and is unreadable in the wide 6x2 one.
+            ax.text(0.975, 0.955, rf"$\Delta_\pi$={tgt[0]:.3f}", transform=ax.transAxes,
+                    ha="right", va="top", fontsize=ANNOT_FS, color=COLORS[rk], zorder=9,
+                    fontweight="bold",
+                    bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=1.6))
+            gaps.setdefault(arm, {})[rk] = float(tgt[0])
+            ax.set_xticks(centers)
+            ax.set_xticklabels([rf"$\ell_{l}$" for l in range(DEPTH)], fontsize=TICK_FS)
+            ax.tick_params(labelsize=TICK_FS)
+        axes[0, r].set_title(SHORT_TEX[rk], color=COLORS[rk], fontsize=LABEL_FS)
+        axes[0, r].set_ylim(0, 1.05)
+    for c, (_, lab) in enumerate(ARMS):
+        axes[c, 0].set_ylabel(lab, fontsize=ROW_FS)
+    fig.supylabel("Policy recovery", fontsize=LABEL_FS, x=0.005)
+    fig.tight_layout()
+    return _save(fig, f"figs/t04_state_anatomy{suffix}"), peak, gaps
+
+
+# ───────────────────────────────────────────────── t06: alpha family, Amari vs canonical
+def _agg_adiv(path):
+    R = json.load(open(path)); man = R["manifest"]; res = R["results"]
+    a_grid = man["a_grid"]
+    out = {}
+    for a in a_grid:
+        f = np.concatenate([np.asarray(c["finals"]) for c in res if abs(c["a"] - a) < 1e-9])
+        out[a] = (float(f.mean()), float(f.std(ddof=1) / np.sqrt(len(f)) * 1.96))
+    return man, a_grid, out
+
+
+def _adiv_peaks():
+    """Cached (peak_pct, amari_path, canonical_path) triples, one per peak that was actually run."""
+    out = []
+    for p in sorted(glob.glob("data/tabular/run_adiv_p*0/results.json")):
+        pk = int(re.search(r"run_adiv_p(\d+)", p).group(1))
+        kln = p.replace(f"_p{pk}/", f"_p{pk}_kln/")
+        if os.path.exists(kln):
+            out.append((pk, p, kln))
+    return out
+
+
+def _draw_alpha(ax, pk, p_am, p_ca, legend, annotate=True):
+    _, A, am = _agg_adiv(p_am)
+    _, _, ca = _agg_adiv(p_ca)
+    keep = [a for a in A if not (0.9 < a < 1.1 and abs(a - 1.0) > 1e-9)]   # drop dense probes
+    Ak = np.array(keep)
+    for d, col, lab in ((am, C_AM, r"Amari  $f'(1)=0$"), (ca, C_CA, r"Canonical  $f'(1)=f''(1)$")):
+        m = np.array([d[a][0] for a in keep]); ci = np.array([d[a][1] for a in keep])
+        ax.plot(Ak, m, marker="o", ms=3.5, lw=1.8, color=col, label=lab)
+        ax.fill_between(Ak, m - ci, m + ci, color=col, alpha=0.15)
+    ax.axvline(1.0, color=COLORS["kl"], ls=":", lw=1.1, alpha=0.7)
+    ax.set_title(f"peak {pk/100:.1f}", fontsize=TITLE_FS)
+    ax.set_xlabel(r"$\alpha$", fontsize=AX_FS); ax.tick_params(labelsize=TICK_FS)
+    ax.grid(alpha=0.2)
+    if legend:
+        ax.legend(fontsize=LEG_FS, loc="lower left")
+    y_am, y_ca = am[1.0][0], ca[1.0][0]
+    if annotate:
+        # alpha=1 is the same divergence on both curves; only the generator's normalization differs,
+        # so the vertical distance there IS the regularity gap.
+        acc = COLORS["kl"]
+        ax.scatter([1.0, 1.0], [y_am, y_ca], s=170, facecolors="none", edgecolors=acc,
+                   linewidths=2.0, zorder=9)
+        ax.annotate("", xy=(1.0, y_ca), xytext=(1.0, y_am), zorder=8,
+                    arrowprops=dict(arrowstyle="<->", color=acc, lw=2.0))
+        ax.text(0.96, (y_am + y_ca) / 2, "regularity\ngap", ha="right", va="center",
+                fontsize=9, fontweight="bold", color=acc)
+        ax.annotate(r"$f(u)=u\ln u-(u-1)$", xy=(1.0, y_am), xytext=(1.05, y_am + 0.022),
+                    fontsize=9, color=acc, ha="left", va="bottom")
+        ax.annotate(r"$f(u)=u\ln u$", xy=(1.0, y_ca), xytext=(1.05, y_ca - 0.022),
+                    fontsize=9, color=acc, ha="left", va="top")
+    return {"amari_at_1": y_am, "canon_at_1": y_ca}
+
+
+def fig_alpha():
+    """One standalone file per cached peak, plus the three-panel version for the main body."""
+    peaks = _adiv_peaks()
+    if not peaks:
+        return [], {}
+    made, tab = [], {}
+    for pk, p_am, p_ca in peaks:                              # standalone, one peak each
+        fig, ax = plt.subplots(figsize=(6.2, 4.6))
+        tab[pk / 100] = _draw_alpha(ax, pk, p_am, p_ca, legend=True)
+        ax.set_ylabel(r"recovery gap $\Delta_\pi$ = mean TV$(\pi_\theta \,\|\, \pi^\star)$", fontsize=AX_FS)
+        ax.set_ylim(0, max(ax.get_ylim()[1], tab[pk / 100]["amari_at_1"] + 0.11))
+        fig.tight_layout()
+        made.append(_save(fig, f"figs/t06_alpha_sweep_p{pk // 10}"))
+    fig, axes = plt.subplots(1, len(peaks), figsize=(4.6 * len(peaks), 4.2), sharey=True)
+    axes = np.atleast_1d(axes)
+    for i, (ax, (pk, p_am, p_ca)) in enumerate(zip(axes, peaks)):
+        _draw_alpha(ax, pk, p_am, p_ca, legend=(i == 0), annotate=False)
+    axes[0].set_ylabel(r"recovery gap $\Delta_\pi$ = mean TV$(\pi_\theta \,\|\, \pi^\star)$", fontsize=AX_FS)
+    axes[0].set_ylim(0, None)
+    fig.tight_layout()
+    made.append(_save(fig, "figs/t06_alpha_sweep"))
+    return made, tab
+
+
+def main():
+    os.makedirs("figs", exist_ok=True)
+    made = []
+    # t04 — one file per cached peak, the peak always named in the filename
+    for path in sorted(glob.glob("data/tabular/canon_2x7_p*.json")):
+        pk = re.search(r"canon_2x7_p(\d+)", path).group(1)
+        p, peak, gaps = fig_anatomy(path, f"_p{pk}")
+        made.append(p)
+        print(f"\nt04 [peak {peak}]  Delta_pi per arm")
+        for rk in REGKEYS:
+            a = gaps.get("std", {}).get(rk); c = gaps.get("canon", {}).get(rk)
+            print(f"  {SHORT[rk]:7s} amari {a:.3f}" + (f"   canonical {c:.3f}" if c is not None
+                                                       else "   canonical —"))
+    ps, tab = fig_alpha()
+    if ps:
+        made.extend(ps)
+        print("\nt06  alpha=1 (RKL) gap per peak")
+        for pk, v in sorted(tab.items()):
+            print(f"  peak {pk}:  amari {v['amari_at_1']:.3f}   canonical {v['canon_at_1']:.3f}")
+    print("\n[saved]" + "".join(f"\n  {m} (+ .pdf)" for m in made))
+
+
+if __name__ == "__main__":
+    main()

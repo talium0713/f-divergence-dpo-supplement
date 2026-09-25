@@ -1,0 +1,10 @@
+{
+  "paper_name": "Figure9",
+  "source_figure": "python/figs/figure9_tabular_recovery",
+  "source_data": "fig_figure9.py \u2014 peak 0.7, two panels: Delta_pi vs the MC budget on-policy, and the exact-vs-single-sample bars (Amari | Canonical | exact) per divergence. The f02 'resampled' middle panel is dropped and the text is rendered by LaTeX, as in Figures 7 and 8.",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

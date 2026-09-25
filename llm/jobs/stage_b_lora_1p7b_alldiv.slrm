@@ -1,0 +1,59 @@
+#!/bin/bash
+# 1.7B LoRA — the five divergences a collaborator's RKL sweep left out, amari vs canonical, one seed.
+#
+# WHY. 8B LoRA now has all six divergences at seeds 0-1 and the spread is wide: RKL averages 64.7
+# while the other five average 53.9. 1.7B FULL fine-tuning has all six at three seeds and is flat by
+# comparison, 60.4-67.0. Those two facts differ in scale AND in adaptation, so neither explains the
+# other. 1.7B LoRA is the cell that separates them: same model as the flat full-FT block, same
+# adaptation as the spread-out 8B block. It is also the cheapest of the three scales.
+#
+# RECIPE. Byte-identical to a collaborator's jobs/div_sweep_1.7b/stage_b_lora_1p7b_rkl_seeds.slrm on his
+# lora-8b-seeds branch, which produced the RKL cells (74.1 / 79.9 / 63.6) these will sit beside —
+# including --no-grad-checkpoint and --save-adapter-every 100. Only --div changes. His script calls
+# stage_b_train_wandb.py, ours calls stage_b_train.py; the difference is logging, not the objective.
+#
+# WALLTIME. His smoke measured 35.8 s/step without gradient checkpointing at 20.4 GB peak, so 1910
+# steps is ~19 h and fits the 24 h tier. --save-adapter-every 100 leaves a resumable checkpoint if a
+# node dies, as happened to the 4B and Gemma runs on 09-19.
+#
+#   array index = spec, spec = (rkl|adiv|js|hel|chi2) x (amari|canon); seed fixed by $SEED
+#   SEED=0 sbatch --export=ALL,SEED jobs/stage_b_lora_1p7b_alldiv.slrm
+# Out: $OUT_DIR/stageB_lora1p7b_{div}_{amari,canon}_bdpo_token_s{seed}  (+ _policy for generation)
+#
+#SBATCH --account=ACCOUNT
+#SBATCH --job-name=l17ball
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --array=0-9%5
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=24:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+
+set -euo pipefail
+REPO="$SLURM_SUBMIT_DIR/.."
+export HF_HOME="/scratch/$USER/hf_cache"
+export HF_HUB_OFFLINE=1
+export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+module load StdEnv/2023 python/3.11 cuda/12.2
+source "$REPO/venv_gpu/bin/activate"
+cd "$REPO/llm"
+OUT_DIR="${OUT_DIR:-/scratch/$USER/bregman-lab/llm/results/bench}"; mkdir -p "$OUT_DIR"   # never /project
+
+SPECS=(rkl:amari rkl:canon adiv:amari adiv:canon js:amari js:canon hel:amari hel:canon chi2:amari chi2:canon)
+SPEC="${SPECS[$SLURM_ARRAY_TASK_ID]}"; DIV="${SPEC%:*}"; NORM="${SPEC#*:}"
+SEED="${SEED:-0}"
+
+echo "=== 1.7B LoRA [$DIV, norm=$NORM, seed=$SEED] on $(hostname) | $(date) ==="; nvidia-smi
+python stage_b_train.py \
+  --ref Qwen/Qwen3-1.7B-Base --policy Qwen/Qwen3-1.7B-Base --init-noise 0.01 \
+  --lora-r 128 --lora-alpha 128 --lora-dropout 0.05 --save-adapter-every 100 \
+  --data data/uf_pairs_train_full.jsonl --eval-data data/uf_pairs_test.jsonl \
+  --div "$DIV" --norm "$NORM" --inner sample --step-mode token \
+  --beta 0.1 --lr 5e-6 --lr-schedule linear --warmup-ratio 0.05 --weight-decay 0.01 --adam-beta2 0.999 \
+  --no-grad-checkpoint --epochs 2 --grad-accum 64 --grad-clip 1.0 --max-len 1024 --clamp 15 \
+  --eval-n 256 --log-every 25 --eval-every 100 --seed "$SEED" --save-policy \
+  --out "$OUT_DIR/stageB_lora1p7b_${DIV}_${NORM}_bdpo_token_s${SEED}"
+echo "=== done 1.7B LoRA [$DIV, norm=$NORM, seed=$SEED] | $(date) ==="

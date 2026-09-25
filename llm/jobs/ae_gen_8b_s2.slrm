@@ -1,0 +1,59 @@
+#!/bin/bash
+# The three AlpacaEval cells still empty in Table 12(b): adiv, squared Hellinger and Pearson chi2 at
+# 8B, seed 2. Six generations, one per arm, 805 prompts each.
+#
+# THREE OF THE SIX POLICIES NO LONGER EXIST. Hellinger (both arms) and chi2 Amari were trained on the
+# rented box, which has been destroyed; only their LoRA adapters were pulled back (1.4 GB each
+# against 16 GB merged). This job re-merges those three from their adapters before generating, which
+# is a few minutes each and bit-identical to what the box held: merge_and_unload is deterministic.
+# adiv (both arms) and chi2 canonical trained on cluster and their merged policies are still here.
+#
+# Generation flags match jobs/gen_alpaca_lora.slrm and a collaborator's gen_alpaca_1p7b_rkl_seeds.slrm:
+# 805 prompts, --max-new 512, tag alpaca_<block>_<div>_<norm>_s<seed>, so the same judging scripts
+# and make_ae_table.py read the output without changes.
+#
+#   array index -> div:norm   (all seed 2, all 8B LoRA)
+# Out: jobs/alpaca_lc/alpaca_lora8b_<div>_<norm>_s2.json
+#
+#SBATCH --account=ACCOUNT
+#SBATCH --job-name=ae8bs2
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --array=0-5%3
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=4:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+
+set -euo pipefail
+REPO="$SLURM_SUBMIT_DIR/.."
+export HF_HOME="/scratch/$USER/hf_cache"
+export HF_HUB_OFFLINE=1
+export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+module load StdEnv/2023 python/3.11 cuda/12.2
+source "$REPO/venv_gpu/bin/activate"
+cd "$REPO/llm"
+OUT_DIR="${OUT_DIR:-/scratch/$USER/bregman-lab/llm/results/bench}"
+mkdir -p jobs/alpaca_lc
+
+SPECS=("adiv|amari" "adiv|canon" "hel|amari" "hel|canon" "chi2|amari" "chi2|canon")
+IFS="|" read -r DIV NORM <<< "${SPECS[$SLURM_ARRAY_TASK_ID]}"
+STEM="$OUT_DIR/stageB_lora8b_${DIV}_${NORM}_bdpo_token_s2"
+TAG="alpaca_lora8b_${DIV}_${NORM}_s2"
+OUT="jobs/alpaca_lc/${TAG}.json"
+
+[ -f "$OUT" ] && [ "$(python -c "import json;print(len(json.load(open('$OUT'))))" 2>/dev/null)" = "805" ] \
+  && { echo "[skip] $TAG already has 805 answers"; exit 0; }
+
+if [ ! -d "${STEM}_policy" ]; then
+  [ -d "${STEM}_adapter" ] || { echo "neither policy nor adapter for ${STEM}"; exit 1; }
+  echo "=== merging ${STEM}_adapter -> ${STEM}_policy | $(date) ==="
+  python merge_adapter.py --adapter "${STEM}_adapter" --base Qwen/Qwen3-8B-Base --out "${STEM}_policy"
+fi
+
+echo "=== gen AlpacaEval 2.0 [$TAG] from ${STEM}_policy on $(hostname) | $(date) ==="; nvidia-smi
+python gen_alpaca.py --model "${STEM}_policy" --prompts data/alpaca_eval.jsonl \
+  --generator "$TAG" --max-new 512 --out "$OUT"
+echo "=== done $TAG -> $OUT | $(date) ==="

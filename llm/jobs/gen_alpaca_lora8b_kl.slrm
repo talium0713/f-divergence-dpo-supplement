@@ -1,0 +1,52 @@
+#!/bin/bash
+# AlpacaEval 2.0 answers for the 8B LoRA RKL pair, seed 0 — the last LoRA RKL cells we hold.
+#
+# WHY HERE AND NOT ON THE RENTED BOX. Stage 1 is offline generation, so a compute node can do it;
+# only the judging needs internet. Both policies already sit in scratch, so running them here costs
+# nothing, where pushing 32 GB to the L40S box would have burned ~55 min of transfer and still left
+# two of its four GPUs idle. See llm/ALPACAEVAL_PROTOCOL.md.
+#
+# THE NAME. The seed-0 8B run predates the _s<seed> suffix, so its policy is
+# stageB_lora8b_kl_<norm>_bdpo_token_policy with no seed in it. gen_alpaca_lora.slrm builds the path
+# as ..._s${SEED}_policy and cannot reach these two; that mismatch is why the rented box sat waiting
+# on two empty directories it could never fill.
+#
+# Recipe identical to gen_alpaca_lora.slrm: 805 prompts, greedy, --max-new 512, tag
+# alpaca_<block>_<div>_<norm>_s<seed>. 6 h, not 4: gen_alpaca.py writes only at the end, so a
+# timeout loses the whole run, and 8B is about twice the 4B's 80 min.
+#
+#SBATCH --account=ACCOUNT
+#SBATCH --job-name=aegen8b
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --array=0-1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=6:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+
+set -euo pipefail
+REPO="$SLURM_SUBMIT_DIR/.."
+export HF_HOME="/scratch/$USER/hf_cache"
+export HF_HUB_OFFLINE=1
+export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+module load StdEnv/2023 python/3.11 cuda/12.2
+source "$REPO/venv_gpu/bin/activate"
+cd "$REPO/llm"
+OUT_DIR="${OUT_DIR:-/scratch/$USER/bregman-lab/llm/results/bench}"
+mkdir -p jobs/alpaca_lc
+
+NORMS=(amari canon)
+NORM="${NORMS[$SLURM_ARRAY_TASK_ID]}"
+POL="$OUT_DIR/stageB_lora8b_kl_${NORM}_bdpo_token_policy"
+TAG="alpaca_lora8b_kl_${NORM}_s0"
+OUT="jobs/alpaca_lc/${TAG}.json"
+[ -d "$POL" ] || { echo "policy $POL missing"; exit 1; }
+[ -f "$OUT" ] && { echo "[skip] $OUT exists"; exit 0; }
+
+echo "=== gen AlpacaEval 2.0 [$TAG] from $POL on $(hostname) | $(date) ==="; nvidia-smi
+python gen_alpaca.py --model "$POL" --prompts data/alpaca_eval.jsonl \
+  --generator "$TAG" --max-new 512 --out "$OUT"
+echo "=== done $TAG -> $OUT | $(date) ==="

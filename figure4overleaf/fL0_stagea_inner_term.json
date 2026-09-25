@@ -1,0 +1,10 @@
+{
+  "paper_name": "fL0_stagea_inner_term",
+  "source_figure": "llm/results/stageA_qwen3_1p7b",
+  "source_data": "stage_a_measure.py --replot \u2014 Stage A, measured with NO training: pi_theta = Qwen3-1.7B, pi_ref = Qwen3-1.7B-Base, 133153 logged tokens from llm/data/uf_test_prefs.jsonl. Left: per-token inner term Phi(u) per divergence, box with 1-99% whiskers on a symlog axis \u2014 RKL is the flat line at Phi=1. Right: histogram of the per-token log10 policy/reference ratio, min u = 1.5e-16. The figure carries no model names or token count of its own (they were dropped from the title on 2026-09-20), so a caption must state them; arrays in llm/results/stageA_qwen3_1p7b_raw.npz",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

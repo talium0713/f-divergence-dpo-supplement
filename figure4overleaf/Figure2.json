@@ -1,0 +1,10 @@
+{
+  "paper_name": "Figure2",
+  "source_figure": "python/figs/t04_state_anatomy_p7",
+  "source_data": "fig_paper_layered_v2.py fig_anatomy \u2014 the state-by-state anatomy at PEAK 0.7, 6 columns (the f-divergences) x 2 rows (Amari f'(1)=0 above, canonical f'(1)=f''(1) below). Dashed grey is pi*, the REGULARIZED optimum recomputed per cell with solve_dp from the cached reward draw and the calibrated weight \u2014 not any arm's recovered policy. Solid is the recovered policy; the per-cell Delta_pi is its mean TV from pi*. x ticks are the four layers of the layered MDP (depth 4, SN 3, NA 3, eps 0.2, gamma 0.9). Euclidean is dropped from the paper figures: not an f-divergence, so its canonical cell never existed and used to render as a hatched placeholder",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

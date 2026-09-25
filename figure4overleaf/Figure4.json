@@ -1,0 +1,10 @@
+{
+  "paper_name": "Figure4",
+  "source_figure": "python/figs/figure4_regularity_gap",
+  "source_data": "fig_figure4.py \u2014 the composed Figure 4, 40/60 on one gridspec row so the two halves share an axes height. (left) tabular: the alpha family at PEAK 0.8 under both normalizations, mean over MDPs with a 95% CI band; alpha=1 is the same divergence on both curves, so the vertical distance there is the regularity gap itself (was figs/t06_alpha_sweep_p8, whose 'peak 0.8' title is dropped \u2014 the caption has to state the peak). (right) Arena-Hard v0.1 stacked: win rate against the fixed gpt-4-0314 baseline above, the direct canonical-vs-Amari head-to-head below, every box 1000 prompt-level bootstrap replicates at 2.5/25/50/75/97.5 (was fL3). Judge gpt-4.1-mini-2025-04-14, 500 prompts, two position-swapped games each \u2014 also caption material, the panels no longer say it. Data: python/data/tabular/run_adiv_p80{,_kln}/results.json, llm/results/bench/arena_v01/topboot_normcmp.json and h2h_normcmp/*_mini2*.json",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

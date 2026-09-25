@@ -1,0 +1,10 @@
+{
+  "paper_name": "f02_tabular_recovery",
+  "source_figure": "python/figs/tabular_headline_p70",
+  "source_data": "fig_tabular.py \u00b7 python/data/tabular/run_headline_p70/results.json (peak 0.7, 2730 cells over 30 MDPs, root seed 20260629). This note said 100 MDPs until 2026-09-20; the run has always had 30. Euclidean is dropped from the paper figures.",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

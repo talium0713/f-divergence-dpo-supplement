@@ -1,0 +1,61 @@
+#!/bin/bash
+# AlpacaEval 2.0 answers for OUR LoRA policies — the 4B RKL block and the 1.7B divergence sweep.
+#
+# WHY. a collaborator evaluates the 1.7B RKL arms this way (his jobs/div_sweep_1.7b/alpaca_lc/), and the
+# canonical arm wins 86.0 / 89.0 / 72.1 LC there against 74.1 / 79.9 / 63.6 on Arena-Hard. A second
+# benchmark that agrees is worth having for the cells only we hold: 4B RKL at three seeds, and the
+# five non-RKL divergences at 1.7B.
+#
+# RECIPE. Identical to his gen_alpaca_1p7b_rkl_seeds.slrm: same 805 prompts, --max-new 512, same
+# generator-tag convention (alpaca_<block>_<div>_<norm>_s<seed>), so his run_h2h_canon_vs_amari.sh
+# and make_ae_table.py read our files without changes.
+#
+# NOT here: 4B RKL Amari seed 1. That policy lives on the rented box (it is B1's output and was
+# never copied back), so its 805 answers are generated there on the idle GPU instead of moving
+# 7.6 GB for one run.
+#
+#   SPECS index -> block:div:norm:seed
+# Out: jobs/alpaca_lc/alpaca_<tag>.json   (the layout his judging scripts expect)
+#
+#SBATCH --account=ACCOUNT
+#SBATCH --job-name=aegen
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --array=0-8%5
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=4:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+
+set -euo pipefail
+REPO="$SLURM_SUBMIT_DIR/.."
+export HF_HOME="/scratch/$USER/hf_cache"
+export HF_HUB_OFFLINE=1
+export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+module load StdEnv/2023 python/3.11 cuda/12.2
+source "$REPO/venv_gpu/bin/activate"
+cd "$REPO/llm"
+OUT_DIR="${OUT_DIR:-/scratch/$USER/bregman-lab/llm/results/bench}"
+mkdir -p jobs/alpaca_lc
+
+#        block    | div  | norm  | seed
+SPECS=(
+  "lora4b|kl|amari|0"   "lora4b|kl|canon|0"
+  "lora4b|kl|canon|1"
+  "lora4b|kl|amari|2"   "lora4b|kl|canon|2"
+  "lora1p7b|rkl|amari|0" "lora1p7b|rkl|canon|0"
+  "lora1p7b|adiv|amari|0" "lora1p7b|adiv|canon|0"
+)
+IFS="|" read -r BLK DIV NORM SEED <<< "${SPECS[$SLURM_ARRAY_TASK_ID]}"
+POL="$OUT_DIR/stageB_${BLK}_${DIV}_${NORM}_bdpo_token_s${SEED}_policy"
+TAG="alpaca_${BLK}_${DIV}_${NORM}_s${SEED}"
+OUT="jobs/alpaca_lc/${TAG}.json"
+[ -d "$POL" ] || { echo "policy $POL missing"; exit 1; }
+[ -f "$OUT" ] && { echo "[skip] $OUT exists"; exit 0; }
+
+echo "=== gen AlpacaEval 2.0 [$TAG] from $POL on $(hostname) | $(date) ==="; nvidia-smi
+python gen_alpaca.py --model "$POL" --prompts data/alpaca_eval.jsonl \
+  --generator "$TAG" --max-new 512 --out "$OUT"
+echo "=== done $TAG -> $OUT | $(date) ==="

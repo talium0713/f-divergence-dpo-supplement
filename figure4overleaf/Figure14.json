@@ -1,0 +1,10 @@
+{
+  "paper_name": "Figure14",
+  "source_figure": "python/figs/traincurves_1p7b",
+  "source_data": "fig_traincurves.py \u2014 1.7B training curves from the W&B CSV exports in llm/results/curves: gradient norm on a log axis (left) and the held-out reward margin (right), mean with the export's min-max band. Amari vs canonical.",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

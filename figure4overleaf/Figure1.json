@@ -1,0 +1,10 @@
+{
+  "paper_name": "Figure1",
+  "source_figure": "python/figs/tabular_bars_p70",
+  "source_data": "fig_tabular.py fig_bars_only \u2014 the exact-vs-off-policy panel of f02 on its own, at PEAK 0.7 over run_headline_p70 (2730 cells, 30 MDPs). Three bars per divergence: exact closed-form inner term over all a' (hatched ///), then the single-logged-action estimator under the Amari normalization f'(1)=0 and under the canonical f'(1)=f''(1), with 95% CIs. Euclidean is dropped from all paper figures \u2014 it is a Bregman, not an f-divergence, so it has no canonical bar at all. Built at 7.6x5.0 in with 17pt labels for placement at about half width",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

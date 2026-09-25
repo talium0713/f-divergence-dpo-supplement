@@ -1,0 +1,74 @@
+#!/bin/bash
+# Finish the LoRA runs that died on the 23 h wall, by warm-restarting from their periodic adapter.
+#
+# WHY NOT JUST USE THE ADAPTERS AS THEY ARE. The wall did not fall in the same place for both arms of a
+# pair: 4B seed 1 is Amari 1000 / canonical 1600, 4B seed 2 is 1200 / 1600, Gemma seed 0 is 1200 / 1600.
+# Reading a canonical-vs-Amari win rate off arms trained for different numbers of steps measures the
+# step gap as much as the normalization, so every arm has to reach the same 1910.
+#
+# WHY A RESUME FITS WHERE THE ORIGINAL DID NOT. Only the missing steps are re-run: 310 steps is 6.5 h at
+# the 4B rate of 75.3 s/step, against the 39.9 h a full 1910 needs. Every one of these fits the 23 h wall
+# that killed the originals, so the b3 tier (84 nodes) stays usable instead of the 3-day tier's 42.
+#
+# WHAT A RESUME IS NOT. The [ckpt] adapter holds weights only — AdamW's moments are gone and restart at
+# zero, so a resumed arm is not bit-identical to an uninterrupted one. With β₂=0.999 the second-moment
+# estimate needs ~1000 steps to re-equilibrate and these runs have 310-910 left, so the moments stay
+# cold for the remainder. This is a real caveat and it applies to both arms of every pair here, which is
+# what keeps the comparison honest; it would NOT be honest to resume one arm and not its partner.
+# Verified before use (job 5552250): 504/504 tensors land, the replayed LR hits the predicted 8.54e-7 at
+# step 1600, and the first resumed step logs loss 0.3234 / acc 0.938 rather than the ln 2 of a fresh init.
+#
+# Reads the frozen copies under _rescued_20260919 — NOT the live _adapter dirs, which this job overwrites
+# as it checkpoints. Writes the finished policy to the original --out, so nothing downstream moves.
+#
+#   0 4B amari s1 @1000   1 4B canon s1 @1600   2 4B amari s2 @1200
+#   3 4B canon s2 @1600   4 gemma canon s0 @1600  5 gemma amari s1 @1600
+#
+#SBATCH --account=ACCOUNT
+#SBATCH --job-name=lorares
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --array=0-5%6
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=23:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+
+set -euo pipefail
+REPO="$SLURM_SUBMIT_DIR/.."
+export HF_HOME="/scratch/$USER/hf_cache"
+export HF_HUB_OFFLINE=1
+export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+module load StdEnv/2023 python/3.11 cuda/12.2
+source "$REPO/venv_gpu/bin/activate"
+cd "$REPO/llm"
+OUT_DIR="/scratch/$USER/bregman-lab/llm/results/bench"
+RESCUED="$OUT_DIR/_rescued_20260919"
+
+#          tag                                   model                    norm   seed  resume_step
+SPECS=(
+  "lora4b_kl_amari_bdpo_token_s1|Qwen/Qwen3-4B-Base|amari|1|1000"
+  "lora4b_kl_canon_bdpo_token_s1|Qwen/Qwen3-4B-Base|canon|1|1600"
+  "lora4b_kl_amari_bdpo_token_s2|Qwen/Qwen3-4B-Base|amari|2|1200"
+  "lora4b_kl_canon_bdpo_token_s2|Qwen/Qwen3-4B-Base|canon|2|1600"
+  "loragemma1b_kl_canon_bdpo_token_s0|google/gemma-3-1b-it|canon|0|1600"
+  "loragemma1b_kl_amari_bdpo_token_s1|google/gemma-3-1b-it|amari|1|1600"
+)
+IFS="|" read -r TAG M NORM SEED RSTEP <<< "${SPECS[$SLURM_ARRAY_TASK_ID]}"
+SRC="$RESCUED/stageB_${TAG}_adapter"
+[ -f "$SRC/adapter_model.safetensors" ] || { echo "no rescued adapter at $SRC"; exit 1; }
+
+echo "=== resume $TAG [norm=$NORM seed=$SEED] from step $RSTEP on $(hostname) | $(date) ==="; nvidia-smi
+python stage_b_train.py \
+  --ref "$M" --policy "$M" --init-noise 0.01 \
+  --lora-r 128 --lora-alpha 128 --lora-dropout 0.05 --save-adapter-every 200 \
+  --resume-adapter "$SRC" --resume-step "$RSTEP" \
+  --data data/uf_pairs_train_full.jsonl --eval-data data/uf_pairs_test.jsonl \
+  --div kl --norm "$NORM" --inner sample --step-mode token \
+  --beta 0.1 --lr 5e-6 --lr-schedule linear --warmup-ratio 0.05 --weight-decay 0.01 --adam-beta2 0.999 \
+  --epochs 2 --grad-accum 64 --grad-clip 1.0 --max-len 1024 --clamp 15 \
+  --eval-n 256 --log-every 25 --eval-every 100 --seed "$SEED" --save-policy \
+  --out "$OUT_DIR/stageB_${TAG}"
+echo "=== done $TAG | $(date) ==="

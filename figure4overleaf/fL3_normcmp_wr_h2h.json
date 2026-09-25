@@ -1,0 +1,10 @@
+{
+  "paper_name": "fL3_normcmp_wr_h2h",
+  "source_figure": "llm/results/stageB_normcmp_wr_h2h",
+  "source_data": "fig_normcmp.py \u2014 canonical(f'=f'') vs Amari(f'=0) on Arena-Hard v0.1, judge gpt-4.1-mini-2025-04-14, 500 prompts. Both panels are boxes on 1000 prompt-level bootstrap replicates at the 2.5/25/50/75/97.5 percentiles: top (vs the gpt-4-0314 baseline) from llm/results/bench/arena_v01/topboot_normcmp.json (arena_boot_dump.py, recovered 2026-09-19 from the existing judgments), bottom (head-to-head) from h2h_normcmp/*_mini2_raw.json (pairwise_h2h.py, re-judged 2026-09-05 to keep the replicates). Before 2026-09-19 the top panel was a transcribed point + 5-95 GAME-level error bar, i.e. a 90% interval on independently-drawn swapped games",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}

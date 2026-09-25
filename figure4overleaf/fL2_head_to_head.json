@@ -1,0 +1,10 @@
+{
+  "paper_name": "fL2_head_to_head",
+  "source_figure": "llm/results/stageB_divergence_h2h",
+  "source_data": "fig_permissibility_h2h.py \u00b7 llm/results/bench/arena_v01/h2h/*.json",
+  "formats": [
+    "png",
+    "pdf"
+  ],
+  "exported_at": "2026-09-24T17:53:45+00:00"
+}
